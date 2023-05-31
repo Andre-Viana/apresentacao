@@ -1,0 +1,45 @@
+﻿const dominio = "http://10.0.60.208/atomhml";
+let listaDigitalizados;
+
+const configs = [
+{
+  "assunto": "Ação de Liberdade",
+  "sigla": "ACL",
+  "subserie_slugs": ["liberdade-de-escravos"]
+},
+{
+  "assunto": "Ação de Manutenção de Posse",
+  "sigla": "AMP",
+  "subserie_slugs": ["esbulho-turbacao-ameaca"]
+},
+{
+  "assunto": "Arrolamento",
+  "sigla": "ARL",
+  "subserie_slugs": ["arrolamento-de-bens"]
+},
+{
+  "assunto": "Crime de Furto",
+  "sigla": "CDF",
+  "subserie_slugs": ["furto", "furto-de-coisa-comum", "furto-de-veiculo-automotor-a-ser-transportado-para-outro-estado-ou-exterior-2", "furto-privilegiado-2", "furto-qualificado"]
+},
+{
+  "assunto": "Crime de Homicídio",
+  "sigla": "CDH",
+  "subserie_slugs": ["homicidio-privilegiado-2", "homicidio-qualificado-2", "homicidio-simples-2"]
+},
+{
+  "assunto": "Crime de Lesões Corporais",
+  "sigla": "CLC",
+  "subserie_slugs": ["grave-2", "gravissima-2", "leve-2", "privilegiada-2", "seguida-de-morte-2"]
+},
+{
+  "assunto": "Inventário",
+  "sigla": "INV",
+  "subserie_slugs": ["inventario-e-partilha"]
+},
+{
+  "assunto": "Ação de Juramento de Alma",
+  "sigla": "AJA",
+  "subserie_slugs": ["juramento-de-alma"]
+}
+];

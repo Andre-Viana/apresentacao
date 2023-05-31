@@ -1,0 +1,387 @@
+/**
+ * Essa função recebe como parametro uma string com o conteúdo de um arquivo CSV e
+	o processa a fim de padronizá-lo, converter o escápe de caracteres especiaís feito
+	pelos programas de planilha para um padrão mais convêncional:
+	
+	- Troca "" para escapar " por \"
+	- Identifica atributos do CSV não delimitados por áspas que contenham o caracter especial ' 
+    e faz a delimitação com as áspas.
+	
+ * @param  {String} plain_csv O conteúdo do CSV
+ * @return {String} 		String com o conteúdo do CSV padronizado.
+ */
+function PlainTextCSVDigest(plain_csv){
+	var group;
+	plain_csv = plain_csv.replace(/((?<!^)|(?<!,))""""((?!,)|(?!$))/g,"")
+		.replace(/((?<!^)|(?<!,))""((?!,)|(?!$))/g,'\\"')
+    /**
+    * A seguinte expressão regular encontra mas ignora qualquer coisa entre áspas
+      para "neutralizar" os atributos do CSV com os quais não precisamos nos preocupar.
+      Então usamos um grupo de captura para selecionar todos os atributos CSV que conte-
+      nham o carácter '. 
+      Crucialmente, passamos como argumento da função replace uma função callback que
+      processará o valor capturado pelo Grupo 1 da expressão regular e retornará o valor
+      substituto, que será usado pela função replace.
+    */
+		.replace(/\\"|"(?:\\"|[^"])*"|((?<=,)[^",]+'+[^",]+(?=,))/g,function(match, group1){
+
+      if(group1){
+        group = '"'+group1+'"';
+        return group;
+      }  
+      else return match;
+		});
+			
+	return plain_csv;
+}
+
+
+/**
+* Testa se a string recebida é um CSV válido, então separa os valores e guarda em uma matriz
+  Se a string não for um CSV bem formado, retorna null.
+
+* @param  {String} text O conteúdo do CSV
+* @return {String[]}    Os valores do CSV em uma matriz
+**/
+function CSVtoArray(text) {
+  var re_valid = /^\s*(?:'[^'\\]*(?:\\[\S\s][^'\\]*)*'|"[^"\\]*(?:\\[\S\s][^"\\]*)*"|[^,'"\s\\]*(?:\s+[^,'"\s\\]+)*)\s*(?:,\s*(?:'[^'\\]*(?:\\[\S\s][^'\\]*)*'|"[^"\\]*(?:\\[\S\s][^"\\]*)*"|[^,'"\s\\]*(?:\s+[^,'"\s\\]+)*)\s*)*$/;
+  var re_value = /(?!\s*$)\s*(?:'([^'\\]*(?:\\[\S\s][^'\\]*)*)'|"([^"\\]*(?:\\[\S\s][^"\\]*)*)"|([^,'"\s\\]*(?:\s+[^,'"\s\\]+)*))\s*(?:,|$)/g;
+  // Retorna NULL se a string não é um CSV bem formado.
+  if (!re_valid.test(text)) return null;
+  var a = [];                     // Inicia array para receber valores.
+  text.replace(re_value, // "Caminha" pela string usando replace com função callback.
+    function(m0, m1, m2, m3) {
+      // Remove barra invertida de \' escapando valores com áspas simples.
+      if (m1 !== undefined) a.push(m1.replace(/\\'/g, "'"));
+      // Remove barra invertida de \" escapando valores com áspas duplas.
+      else if (m2 !== undefined) a.push(m2.replace(/\\"/g, '"'));
+      else if (m3 !== undefined) a.push(m3);
+      return ''; // Retorna string vazia.
+    });
+  // Lida com casos de último atributo vazio.
+  if (/,\s*$/.test(text)) a.push('');
+  return a;
+};
+
+/**
+* Recebe conteúdo CSV e retorna uma matriz de objetos correspondentes aos
+  registros do CSV.
+
+* @param  {String} csv O conteúdo do CSV
+* @return ${object[]}    Os registros do CSV convertidos em objetos
+**/
+function csvJSON(csv){
+
+  var lines = csv.split("\n");
+  var result = [];
+  var headers = lines[0].split(",");
+  
+  for (i=0; i<headers.length; i++){
+    headers[i] = stringStandard(headers[i]);
+  }
+  
+  for(var i=1;i<lines.length;i++){
+
+    var obj = {};
+    var currentline = CSVtoArray(lines[i]);
+    
+    if (currentline !== null){
+      for(var j=0;j<headers.length;j++){
+        obj[headers[j]] = currentline[j];
+      }
+      result.push(obj);
+    } else {
+      errorAlert("O Arquivo não é um CSV válido.");
+    }
+  }
+  //return result; //JavaScript object
+  return JSON.stringify(result); //JSON
+}
+
+function stringStandard(text){
+  if (typeof text === 'string'){
+    text = text.trim();
+    text = text.replace(/\s+|\/+|\./g, '_').toLowerCase();
+    text = text.replace(/["'º§.,#!$%\^&\*;:{}=\-`~()]/g,"");
+    text = text.replace(/_{2,}/g, '_').replace(/-{2,}/g, '_');
+    text = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return text;
+  }else console.log("NÃO É UMA STRING");
+}
+
+/**
+* Converte string de data no formato DD/MM/AAAA para o padrão americano.
+
+* @param {String} date Data no formato DD/MM/AAAA 
+* @return {String}    Data no formato AAAA-MM-DD
+**/
+function dateToISO8601 (date){
+	var time_scopes = date.split("/");
+	return time_scopes[2]+"-"+time_scopes[1]+"-"+time_scopes[0];
+}
+
+/**
+* Extrai o nome da comarca do atributo "projeto" no CSV
+
+* @param {String} comarca Atributo "projeto" do CSV.
+* @return {String}    Nome da Comarca
+**/
+function digestNomeComarca (comarca){
+	comarca = comarca.replace(/\d{4,4}-\w{3,3}-/g,"").toLowerCase();
+	return comarca;
+}
+
+/**
+* Converte uma string para o padrão "Proper Case", com as iniciais de cada palavra capita-
+  lizada.
+
+* @param {String} frase Frase Texto a ser convertido.
+* @return {String}    Frase convertida para o padrão 
+**/
+function capitalizeWords (frase, exceptions = []){
+	var words = frase.split(" ");
+	for (let i = 0; i < words.length; i++){
+    if (i > 0 && exceptions.length > 0 && exceptions.includes(words[i])){
+      words[i] = words[i];
+    }else{
+      words[i] = words[i][0].toUpperCase() + words[i].substr(1);
+    }
+	}
+	return words.join(" ");
+}
+
+const descricoes = [];
+
+window.onload = function() {
+  
+  let digitalizados = getDigitalizados();
+  
+  fillAssuntos();
+  fillSlugs();
+  append_configs(configs);
+  append_digitalizados(digitalizados);
+  document.getElementById('file').addEventListener('change', onCsvUpload);
+  document.getElementById('lista').addEventListener('change', onListUpload);
+  
+/**
+* Função disparada quando o "Event Listner" adicionado ao elemento do DOM observa  a ocorrência
+  do gatilho, no caso, o evento esperado é "change". 
+  
+* @param {Event} event Objeto do evento recebido pela função quando o "gatilho" é desparado.
+**/  
+	function onCsvUpload(event) {
+    descricoes.length = 0;
+    clearAlert('notify');
+		var reader = new FileReader();
+		reader.onload = onReaderLoad;
+		reader.readAsText(event.target.files[0]);
+   
+	}
+  
+  function onListUpload(event){
+    var reader = new FileReader();
+		reader.onload = onReaderLoadList;
+		reader.readAsText(event.target.files[0]);
+  }
+
+/**
+* Função disparada mediante a ocorrência do evento 'onload' invocado por um objeto FileReader.
+  Aqui o conteúdo do arquivo de texto será tratado.
+
+* @param {Event} event 
+**/
+	function onReaderLoad(event){
+		var csv = event.target.result;
+		csv = PlainTextCSVDigest(csv);
+		var parsedJSON = JSON.parse(csvJSON(csv));
+    let _digitalizados = Array.from(getDigitalizados());
+    console.log(_digitalizados);
+		for (var i=0;i<parsedJSON.length;i++) {
+      var stand_filename = StandardFileName(parsedJSON[i].processo+" "+parsedJSON[i].parte);
+      _digitalizados.forEach((line) => {
+        if (String(line).includes(stand_filename)){
+          descricoes.push(parsedJSON[i]);
+        }
+      });
+		}
+		console.log(descricoes);
+	}
+  
+  function onReaderLoadList(event){
+    listaDigitalizados = event.target.result;
+    console.log(listaDigitalizados);
+  }
+}
+
+function removeOptions(selectElement) {
+   var i, L = selectElement.options.length - 1;
+   for(i = L; i >= 0; i--) {
+      selectElement.remove(i);
+   }
+}
+
+function clearAlert(elementID)
+{
+    document.getElementById(elementID).innerHTML = "";
+    document.getElementById(elementID).style.display = "none";
+}
+
+function errorAlert(message){
+  document.getElementById("notify").innerHTML = message;
+  document.getElementById("notify").style.display = "block";
+}
+
+const ddlassunto = document.getElementById("ddlassunto");
+const ddlslugs = document.getElementById("ddlslugs");
+
+function fillSlugs(){
+  
+  removeOptions(ddlslugs);
+  
+  var val = ddlassunto.value;
+  var slugs = [];
+  for (var i=0; i<configs.length; i++){
+    if (configs[i].sigla == val) {
+      slugs = configs[i].subserie_slugs;
+      break;
+    } 
+  }
+  for (var i=0; i<slugs.length; i++){
+    var opcao = document.createElement("OPTION");
+    
+    opcao.innerHTML = slugs[i];
+    opcao.value = slugs[i];
+    
+    ddlslugs.options.add(opcao);
+  }
+}
+
+function fillAssuntos(){
+  
+  for (var i=0; i<configs.length; i++){
+    var opcao = document.createElement("OPTION");
+    
+    opcao.innerHTML = configs[i].assunto;
+    opcao.value = configs[i].sigla;
+    
+    ddlassunto.options.add(opcao);
+  }
+}
+
+/**
+* Função deve retornar um array de Strings de processos já digitalizados.
+
+* @return {String[]} Lista de indetificadores únicos de processos digitalizados 
+**/ 
+function getDigitalizados(){
+  var text = String(listaDigitalizados).split("\n");
+  console.log(listaDigitalizados);
+  text.forEach((line, i) => {
+    text[i] = line.replace(/[A-Z]{1,1}:/g,dominio)
+    .replace(/\\/g,'/').replace(/\r$/g,"");
+  });
+  return text;
+}
+
+var description_csv = "legacyId,parentId,qubitParentSlug,accessionNumber,identifier,title,levelOfDescription,extentAndMedium,repository,archivalHistory,acquisition,scopeAndContent,appraisal,accruals,arrangement,accessConditions,reproductionConditions,language,script,languageNote,physicalCharacteristics,findingAids,locationOfOriginals,locationOfCopies,relatedUnitsOfDescription,publicationNote,digitalObjectPath,digitalObjectURI,generalNote,subjectAccessPoints,placeAccessPoints,nameAccessPoints,genreAccessPoints,descriptionIdentifier,institutionIdentifier,rules,descriptionStatus,levelOfDetail,revisionHistory,languageOfDescription,scriptOfDescription,sources,archivistNote,publicationStatus,physicalObjectName,physicalObjectLocation,physicalObjectType,alternativeIdentifiers,alternativeIdentifierLabels,eventDates,eventTypes,eventStartDates,eventEndDates,eventActors,eventActorHistories,culture\n";
+
+function descriptionCSV(obj){
+  description_csv += `"${obj.legacyId}","${obj.parentId}","${obj.qubitParentSlug}","${obj.accessionNumber}","${obj.identifier}","${obj.title}","${obj.levelOfDescription}","${obj.extentAndMedium}","${obj.repository}","${obj.archivalHistory}","${obj.acquisition}","${obj.scopeAndContent}","${obj.appraisal}","${obj.accruals}","${obj.arrangement}","${obj.accessConditions}","${obj.reproductionConditions}","${obj.language}","${obj.script}","${obj.languageNote}","${obj.physicalCharacteristics}","${obj.findingAids}","${obj.locationOfOriginals}","${obj.locationOfCopies}","${obj.relatedUnitsOfDescription}","${obj.publicationNote}","${obj.digitalObjectPath}","${obj.digitalObjectURI}","${obj.generalNote}","${obj.subjectAccessPoints}","${obj.placeAccessPoints}","${obj.nameAccessPoints}","${obj.genreAccessPoints}","${obj.descriptionIdentifier}","${obj.institutionIdentifier}","${obj.rules}","${obj.descriptionStatus}","${obj.levelOfDetail}","${obj.revisionHistory}","${obj.languageOfDescription}","${obj.scriptOfDescription}","${obj.sources}","${obj.archivistNote}","${obj.publicationStatus}","${obj.physicalObjectName}","${obj.physicalObjectLocation}","${obj.physicalObjectType}","${obj.alternativeIdentifiers}","${obj.alternativeIdentifierLabels}","${obj.eventDates}","${obj.eventTypes}","${obj.eventStartDates}","${obj.eventEndDates}","${obj.eventActors}","${obj.eventActorHistories}","${obj.culture}"\n`;
+
+}
+
+function writeFile(txt){
+  var aTag = document.getElementById("dld_csv");
+  let blob = new Blob([txt], {type: 'text/plain'});
+  var filename = getTimeStamp()+ "_" + stringStandard(ddlassunto.options[ddlassunto.selectedIndex].text)+".csv";
+  aTag.setAttribute('download',filename);
+  const url = URL.createObjectURL(blob);
+  aTag.href = url;
+}
+
+function Main(){
+  
+  var artigos = ['um', 'uma', 'de', 'do', 'da', 'a', 'o', 'é', 'e'];
+  
+  if (descricoes == null){
+    console.log("Array de descrições vazio");
+    return;
+  } 
+  var i;
+  for(i=0; i<descricoes.length; i++){
+    var infObj = InformationObject;
+    var comarca = digestNomeComarca(descricoes[i].projeto);
+    comarca = capitalizeWords(comarca,artigos);
+    infObj.eventStartDates = dateToISO8601(descricoes[i].data_de_distribuicao);
+    infObj.eventEndDates = dateToISO8601(descricoes[i].data_de_distribuicao);
+    infObj.qubitParentSlug = ddlslugs.value;
+    infObj.identifier = ddlassunto.value + descricoes[i].processo;
+    infObj.eventActors = "Comarca de "+comarca;
+    infObj.title = ddlassunto.options[ddlassunto.selectedIndex].text + " n° " + descricoes[i].processo;
+    var stand_filename = StandardFileName(descricoes[i].processo+" "+descricoes[i].parte);
+    var objPath = "";
+    Array.from(getDigitalizados()).forEach((line) => {
+      if (String(line).includes(stand_filename)) objPath = line;
+    });
+    infObj.digitalObjectPath = objPath;
+    
+    descriptionCSV(infObj);
+    
+    if (i == descricoes.length - 1) progress();
+  }
+  console.log(description_csv);
+  writeFile(description_csv);
+}
+
+function getTimeStamp(){
+  var dateObj = new Date();
+
+  let year = dateObj.getFullYear();
+
+  let month = dateObj.getMonth();
+  month = ('0' + (month + 1)).slice(-2);
+  // To make sure the month always has 2-character-format. For example, 1 => 01, 2 => 02
+
+  let date = dateObj.getDate();
+  date = ('0' + date).slice(-2);
+  // To make sure the date always has 2-character-format
+
+  let hour = dateObj.getHours();
+  hour = ('0' + hour).slice(-2);
+  // To make sure the hour always has 2-character-format
+
+  let minute = dateObj.getMinutes();
+  minute = ('0' + minute).slice(-2);
+  // To make sure the minute always has 2-character-format
+
+  let second = dateObj.getSeconds();
+  second = ('0' + second).slice(-2);
+  // To make sure the second always has 2-character-format
+
+  var time = `${year}-${month}-${date}_${hour}-${minute}-${second}`;
+  return time;
+  
+}
+
+function StandardFileName(text){
+  if (typeof text === 'string'){
+  
+    text = text.trim();
+    
+    var valid = /[\s]+/;
+    if (!valid.test(text)) return null;
+  
+    text = text.replace(/\s+|\/+|\./g,'-').toLowerCase();
+    text = text.replace(/["'º§.#!$%\^&\*;:{}=\_`~()]/g,"");
+    text = text.replace(/-{2,}/g, '-').replace(/_{2,}/g, '-');
+    text = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    text =  text.replace(/,|-,|-,/g,'_').replace(/_-/g, "_");
+    text = sliceName(text);
+    return text;
+  }else console.log("NÃO É UMA STRING");
+} 
+
+function sliceName(str){
+  var chunks = str.match(/.{1,100}(?:_|$)/g);
+  return chunks[0].replace(/^_+|_+$/g, "");
+}
